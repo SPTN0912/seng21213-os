@@ -121,6 +121,24 @@ void vga_set_cursor(int row, int col) {
     cursor_col = (col < 0) ? 0 : (col >= VGA_COLS ? VGA_COLS - 1 : col);
     update_hw_cursor();
 }
+void vga_puts_at(int row, int col, const char *str,
+                 vga_color_t fg, vga_color_t bg) {
+    if (!str) return;
+
+    if (row < 0 || row >= VGA_ROWS ||
+        col < 0 || col >= VGA_COLS) {
+        return;
+    }
+
+    uint8_t attr = VGA_ATTR(fg, bg);
+    int current_col = col;
+
+    while (*str && current_col < VGA_COLS) {
+        vga_write_cell(row, current_col, *str, attr);
+        current_col++;
+        str++;
+    }
+}
 
 /* Minimal vga_printf: supports %s, %c, %d, %u, %x */
 static void print_uint(uint32_t n, int base) {

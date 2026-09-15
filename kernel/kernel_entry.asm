@@ -10,6 +10,10 @@
 [GLOBAL _start]
 
 _start:
+    ; Disable interrupts until the kernel has installed the IDT,
+    ; PIC, and PIT.
+    cli
+
     ; The bootloader already set up segments and a stack at 0x90000.
     ; We just call the C kernel main function.
     call kernel_main

@@ -1,4 +1,4 @@
-# SENG21213-OS — Stage 0: Kernel Foundations
+# SENG21213-OS — Stage 1: Process Management & Scheduler
 
 > **Course**: SENG 21213 – Computer Architecture & Operating Systems  
 > **Year**: 2nd Year, Software Engineering  
@@ -8,26 +8,35 @@
 
 ## What Is This?
 
-This is **Stage 0** of your semester-long OS assignment. Over 5 lecture milestones
-(Lectures 8–12), your team will transform this minimal kernel into a functioning
-operating system with process management, threading, memory management, and a
-file system.
+This is **Stage 1** of your semester-long OS assignment. Stage 0 established the
+boot process, VGA display, keyboard input, and shell. Stage 1 adds process
+management, timer interrupts, context switching, and a Round-Robin scheduler.
 
 ```
 seng21213-os/
 ├── boot/
-│   └── boot.asm          ← MBR Bootloader (NASM, 16-bit → 32-bit transition)
+│   ├── boot.asm              ← MBR bootloader (16-bit → 32-bit protected mode)
+│   └── switch.asm            ← Context switching and IRQ0 timer handler
+│
 ├── kernel/
-│   ├── kernel_entry.asm  ← Protected-mode entry, calls kernel_main()
-│   ├── kernel.c          ← Main kernel: shell loop, command dispatch
-│   ├── vga.c / vga.h     ← VGA 80×25 text-mode driver
-│   ├── keyboard.c / .h   ← PS/2 keyboard polling driver
+│   ├── kernel_entry.asm      ← Protected-mode entry point, calls kernel_main()
+│   ├── kernel.c              ← Main kernel, shell, and Stage 1 processes
+│   ├── process.c             ← Process creation and PCB management
+│   ├── process.h             ← PCB structure, states, and process interface
+│   ├── scheduler.c           ← PIT, IDT, IRQ0, and Round-Robin scheduler
+│   ├── vga.c                 ← VGA 80×25 text-mode driver implementation
+│   ├── vga.h                 ← VGA driver declarations and colors
+│   ├── keyboard.c            ← PS/2 keyboard polling driver implementation
+│   └── keyboard.h            ← Keyboard driver declarations
+│
 ├── include/
-│   └── types.h           ← Primitive types (no libc!)
-├── linker.ld             ← Linker script (kernel at 0x10000)
-├── Makefile              ← Build system
-├── Dockerfile            ← Reproducible build environment
-└── README.md             ← You are here
+│   └── types.h               ← Primitive integer types and bool
+│
+├── linker.ld                 ← Linker script (kernel loaded at 0x10000)
+├── Makefile                  ← Build system
+├── Dockerfile                ← Reproducible build environment
+├── .gitignore                ← Ignored build artifacts
+└── README.md                 ← Project documentation
 ```
 
 ---
@@ -37,7 +46,7 @@ seng21213-os/
 | Lecture | Milestone | Files to Add |
 |---------|-----------|-------------|
 | L08 | ✅ Stage 0 – Boot + VGA + Shell | *Given to you* |
-| L09 | Process Management | `kernel/process.c`, `kernel/scheduler.c` |
+| L09 | ✅ Stage 1 – Process Management & Scheduler | `kernel/process.c`, `kernel/process.h`, `kernel/scheduler.c`, `boot/switch.asm` |
 | L10 | Threads & Synchronisation | `kernel/thread.c`, `kernel/mutex.c` |
 | L11 | Memory Management | `kernel/pmm.c`, `kernel/vmm.c` |
 | L12 | File System | `kernel/fs.c`, `kernel/ramdisk.c` |
@@ -105,46 +114,71 @@ boot/boot.asm  (Real Mode, 16-bit)
 kernel/kernel_entry.asm  (Protected Mode, 32-bit)
   │  Calls kernel_main()
   ▼
-kernel/kernel.c  →  kernel_main()
-  │  vga_init()     – set up text display
-  │  kb_init()      – set up keyboard
-  │  print_splash() – welcome screen
-  │  shell_run()    – interactive shell (infinite loop)
   ▼
-Your code from here...
+kernel/kernel.c  →  kernel_main()
+  │  vga_init()       – set up text display
+  │  kb_init()        – set up keyboard
+  │  print_splash()   – welcome screen
+  │  process_init()   – initialize the process table
+  │  process_create() – create the shell and demo processes
+  │  scheduler_init() – configure IDT, PIC, and PIT
+  ▼
+PIT → IRQ0 → Round-Robin scheduler → Context switch
 ```
 
 ---
 
 ## Building Lecture 9: Process Management
 
-When you reach Lecture 9, you'll add process support. Here's the interface to implement:
+## Stage 1: Process Management & Scheduler
 
-```c
-/* kernel/process.h  — you write this! */
+Stage 1 implements basic process management and preemptive Round-Robin
+scheduling using the x86 PIT timer and IRQ0.
 
-#define MAX_PROCESSES    16
-#define STACK_SIZE     4096
+### Process Management
 
-typedef enum { READY, RUNNING, BLOCKED, TERMINATED } proc_state_t;
+Each process is represented by a Process Control Block (PCB) containing:
 
-typedef struct pcb {
-    uint32_t      pid;
-    proc_state_t  state;
-    uint32_t      esp;          /* Saved stack pointer */
-    uint32_t      eip;          /* Saved instruction pointer */
-    uint32_t      stack[STACK_SIZE / 4];
-    struct pcb   *next;         /* For linked-list ready queue */
-} pcb_t;
+- Process ID (PID)
+- Process state
+- Saved stack pointer (ESP)
+- Entry point (EIP)
+- 4 KB process stack
 
-void   process_init(void);
-pcb_t *process_create(void (*entry)(void));
-void   process_yield(void);        /* Trigger context switch */
-void   process_exit(void);
-void   scheduler_tick(void);       /* Called by timer IRQ (Lecture 10) */
-```
+The kernel creates three processes:
 
----
+1. Shell process
+2. Demo process 1
+3. Demo process 2
+
+### Timer and Scheduling
+
+The PIT is configured to generate approximately 100 timer interrupts per
+second (one interrupt every 10 ms).
+
+IRQ0 is handled by `boot/switch.asm`. The handler saves the current CPU
+register state and calls `scheduler_tick_context()` to select the next process.
+
+The scheduler uses Round-Robin scheduling to give each READY/RUNNING process
+a time slice.
+
+### Shell Command
+
+The `ps` command displays the PID and current state of every process:
+
+```text
+PID    STATE
+----------------
+1      RUNNING
+2      READY
+3      READY
+
+##Stage 1 Files
+
+kernel/process.h
+kernel/process.c
+kernel/scheduler.c
+boot/switch.asm
 
 ## Debugging Tips
 

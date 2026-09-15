@@ -21,8 +21,10 @@
  *   - NEVER call malloc – use the PMM you build in Lecture 11
  * ============================================================================*/
 
+
 #include "vga.h"
 #include "keyboard.h"
+#include "process.h"
 #include "../include/types.h"
 
 /* ---------------------------------------------------------------------------
@@ -33,6 +35,14 @@ static void cmd_clear(void);
 static void cmd_about(void);
 static void cmd_echo(const char *args);
 static void cmd_mem(void);
+static void cmd_ps(void);
+
+/* ---------------------------------------------------------------------------
+ * Stage 1 demo processes
+ * --------------------------------------------------------------------------*/
+static void shell_process(void);
+static void demo_process_1(void);
+static void demo_process_2(void);
 
 /* ---------------------------------------------------------------------------
  * Utility: minimal string helpers (no libc in a freestanding kernel!)
@@ -158,6 +168,42 @@ static void cmd_mem(void) {
     vga_puts_color("\n  TODO: Use BIOS int 0x15, EAX=0xE820 to get real memory map\n\n",
                    VGA_YELLOW, VGA_BLACK);
 }
+static void cmd_ps(void) {
+    pcb_t *table = process_get_table();
+    uint32_t count = process_get_count();
+
+    vga_puts_color("\n  PID    STATE\n",
+                   VGA_LIGHT_CYAN, VGA_BLACK);
+    vga_puts("  ----------------\n");
+
+    for (uint32_t i = 0; i < count; i++) {
+        vga_printf("  %u      ", table[i].pid);
+
+        switch (table[i].state) {
+            case READY:
+                vga_puts_color("READY\n", VGA_LIGHT_GREEN, VGA_BLACK);
+                break;
+
+            case RUNNING:
+                vga_puts_color("RUNNING\n", VGA_YELLOW, VGA_BLACK);
+                break;
+
+            case BLOCKED:
+                vga_puts_color("BLOCKED\n", VGA_LIGHT_RED, VGA_BLACK);
+                break;
+
+            case TERMINATED:
+                vga_puts_color("TERMINATED\n", VGA_LIGHT_RED, VGA_BLACK);
+                break;
+
+            default:
+                vga_puts("UNKNOWN\n");
+                break;
+        }
+    }
+
+    vga_puts("\n");
+}
 
 /* ---------------------------------------------------------------------------
  * Shell process
@@ -189,24 +235,65 @@ static void shell_run(void) {
         }
 
         /* Milestone stubs */
-        if (k_strcmp(cmd, "ps")      == 0 ||
-            k_strcmp(cmd, "kill")    == 0 ||
-            k_strcmp(cmd, "threads") == 0 ||
-            k_strcmp(cmd, "free")    == 0 ||
-            k_strcmp(cmd, "ls")      == 0 ||
-            k_strcmp(cmd, "cat")     == 0) {
-            vga_puts_color("  [TODO] This command is not yet implemented.\n",
-                           VGA_YELLOW, VGA_BLACK);
-            vga_puts("  Implement it as part of your lecture assignment.\n");
-            continue;
-        }
+        /* Stage 1: process listing */
+if (k_strcmp(cmd, "ps") == 0) {
+    cmd_ps();
+    continue;
+}
+
+/* Milestone stubs */
+if (k_strcmp(cmd, "kill")    == 0 ||
+    k_strcmp(cmd, "threads") == 0 ||
+    k_strcmp(cmd, "free")    == 0 ||
+    k_strcmp(cmd, "ls")      == 0 ||
+    k_strcmp(cmd, "cat")     == 0) {
+    vga_puts_color("  [TODO] This command is not yet implemented.\n",
+                   VGA_YELLOW, VGA_BLACK);
+    vga_puts("  Implement it as part of your lecture assignment.\n");
+    continue;
+}
 
         vga_puts_color("  Unknown command: ", VGA_LIGHT_RED, VGA_BLACK);
         vga_puts(cmd);
         vga_puts("\n  Type 'help' for a list of commands.\n");
     }
 }
+/* ---------------------------------------------------------------------------
+ * Stage 1 process entry points
+ * --------------------------------------------------------------------------*/
 
+/*
+ * Process 1: runs the existing interactive shell.
+ */
+static void shell_process(void) {
+    shell_run();
+
+    /*
+     * shell_run() normally never returns.
+     * Keep the process alive if it ever does.
+     */
+    for (;;) {
+        __asm__ __volatile__("hlt");
+    }
+}
+/*
+ * Process 2: demonstrates that the scheduler is running.
+ */
+static void demo_process_1(void) {
+    for (;;) {
+        for (volatile uint32_t i = 0; i < 50000; i++) {
+        }
+    }
+}
+/*
+ * Process 3: second scheduler demonstration process.
+ */
+static void demo_process_2(void) {
+    for (;;) {
+        for (volatile uint32_t i = 0; i < 100000; i++) {
+        }
+    }
+}
 /* ---------------------------------------------------------------------------
  * Kernel entry point – called from kernel_entry.asm
  * --------------------------------------------------------------------------*/
@@ -214,8 +301,22 @@ void kernel_main(void) {
     vga_init();
     kb_init();
     print_splash();
-    shell_run();
 
-    /* Should never reach here */
-    __asm__ __volatile__("hlt");
+    process_init();
+
+    /* Create the Stage 1 processes. */
+    process_create(shell_process);
+    process_create(demo_process_1);
+    process_create(demo_process_2);
+
+    /* Initialize the timer and scheduler. */
+    scheduler_init();
+
+    /*
+     * The scheduler now controls execution.
+     * The PIT will generate IRQ0 every 10 ms.
+     */
+    for (;;) {
+        __asm__ __volatile__("hlt");
+    }
 }
