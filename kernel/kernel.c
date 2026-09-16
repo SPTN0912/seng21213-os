@@ -26,6 +26,7 @@
 #include "keyboard.h"
 #include "process.h"
 #include "pmm.h"
+#include "fs.h"
 #include "../include/types.h"
 
 /* ---------------------------------------------------------------------------
@@ -39,6 +40,11 @@ static void cmd_echo(const char *args);
 static void cmd_mem(void);
 static void cmd_meminfo(void);
 static void cmd_ps(void);
+static void cmd_ls(void);
+static void cmd_touch(const char *name);
+static void cmd_cat(const char *name);
+static void cmd_write(const char *args);
+static void cmd_rm(const char *name);
 
 /* ---------------------------------------------------------------------------
  * Stage 1 demo processes
@@ -135,8 +141,11 @@ static void cmd_help(void) {
     vga_puts("  kill    – [L09] Terminate a process\n");
     vga_puts("  threads – [L10] List kernel threads\n");
     vga_puts("  free    – [L11] Show free memory\n");
-    vga_puts("  ls      – [L12] List files\n");
-    vga_puts("  cat     – [L12] Print file contents\n\n");
+vga_puts("  ls      – [L12] List files\n");
+vga_puts("  touch   – [L12] Create an empty file\n");
+vga_puts("  cat     – [L12] Print file contents\n");
+vga_puts("  write   – [L12] Append text to a file\n");
+vga_puts("  rm      – [L12] Remove a file\n\n");
 }
 
 static void cmd_clear(void) {
@@ -223,6 +232,188 @@ static void cmd_ps(void) {
 
     vga_puts("\n");
 }
+/* ---------------------------------------------------------------------------
+ * Stage 4 - RAM disk filesystem commands
+ * --------------------------------------------------------------------------*/
+
+static void cmd_ls(void) {
+    char buffer[4096];
+    int count;
+
+    count = fs_list(buffer, sizeof(buffer));
+
+    vga_puts_color("\n  Files on RAM disk\n", VGA_LIGHT_CYAN, VGA_BLACK);
+    vga_puts("  -----------------\n");
+
+    if (count < 0) {
+        vga_puts_color("  Error: could not list files.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    if (count == 0) {
+        vga_puts("  (empty)\n");
+        return;
+    }
+
+    vga_puts(buffer);
+}
+static void cmd_touch(const char *name) {
+    int fd;
+
+    if (name == NULL || k_strlen(name) == 0) {
+        vga_puts_color("  Usage: touch <name>\n",
+                       VGA_YELLOW, VGA_BLACK);
+        return;
+    }
+
+    fd = fs_open(name, FS_O_CREATE | FS_O_WRONLY);
+
+    if (fd < 0) {
+        vga_puts_color("  Error: could not create file.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    fs_close(fd);
+
+    vga_puts("  File created: ");
+    vga_puts(name);
+    vga_puts("\n");
+}
+static void cmd_cat(const char *name) {
+    int fd;
+    int bytes_read;
+    char buffer[256];
+
+    if (name == NULL || k_strlen(name) == 0) {
+        vga_puts_color("  Usage: cat <name>\n",
+                       VGA_YELLOW, VGA_BLACK);
+        return;
+    }
+
+    fd = fs_open(name, FS_O_RDONLY);
+
+    if (fd < 0) {
+        vga_puts_color("  Error: file not found.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    while (true) {
+        bytes_read = fs_read(fd, buffer, sizeof(buffer) - 1);
+
+        if (bytes_read <= 0) {
+            break;
+        }
+
+        buffer[bytes_read] = '\0';
+        vga_puts(buffer);
+    }
+
+    fs_close(fd);
+    vga_puts("\n");
+}
+static void cmd_write(const char *args) {
+    char name[FS_NAME_MAX];
+    const char *text;
+    uint32_t name_length;
+    uint32_t text_length;
+    int fd;
+    int bytes_written;
+
+    if (args == NULL) {
+        vga_puts_color("  Usage: write <name> <text>\n",
+                       VGA_YELLOW, VGA_BLACK);
+        return;
+    }
+
+    args = k_ltrim(args);
+
+    if (k_strlen(args) == 0) {
+        vga_puts_color("  Usage: write <name> <text>\n",
+                       VGA_YELLOW, VGA_BLACK);
+        return;
+    }
+
+    /* Find the space separating the filename and text. */
+    text = args;
+
+    while (*text != '\0' && *text != ' ') {
+        text++;
+    }
+
+    name_length = (uint32_t)(text - args);
+
+    if (name_length == 0 || name_length >= FS_NAME_MAX) {
+        vga_puts_color("  Error: invalid filename.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    /* Copy the filename into a separate buffer. */
+    for (uint32_t i = 0; i < name_length; i++) {
+        name[i] = args[i];
+    }
+    name[name_length] = '\0';
+
+    /* Skip spaces before the text. */
+    text = k_ltrim(text);
+
+    text_length = k_strlen(text);
+
+    if (text_length == 0) {
+        vga_puts_color("  Usage: write <name> <text>\n",
+                       VGA_YELLOW, VGA_BLACK);
+        return;
+    }
+
+    /* Open an existing file in append mode. */
+    fd = fs_open(name, FS_O_WRONLY | FS_O_APPEND);
+
+    if (fd < 0) {
+        vga_puts_color("  Error: file not found. Use touch first.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    bytes_written = fs_write(fd, text, text_length);
+
+    fs_close(fd);
+
+    if (bytes_written < 0) {
+        vga_puts_color("  Error: could not write to file.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    vga_puts("  Written ");
+    vga_printf("%u", (uint32_t)bytes_written);
+    vga_puts(" bytes to ");
+    vga_puts(name);
+    vga_puts("\n");
+}
+static void cmd_rm(const char *name) {
+    int result;
+
+    if (name == NULL || k_strlen(name) == 0) {
+        vga_puts_color("  Usage: rm <name>\n",
+                       VGA_YELLOW, VGA_BLACK);
+        return;
+    }
+
+    result = fs_unlink(name);
+
+    if (result < 0) {
+        vga_puts_color("  Error: could not remove file.\n",
+                       VGA_LIGHT_RED, VGA_BLACK);
+        return;
+    }
+
+    vga_puts("  File removed: ");
+    vga_puts(name);
+    vga_puts("\n");
+}
 
 /* ---------------------------------------------------------------------------
  * Shell process
@@ -264,12 +455,36 @@ if (k_strcmp(cmd, "ps") == 0) {
     continue;
 }
 
+/* Stage 4: RAM disk filesystem commands */
+if (k_strcmp(cmd, "ls") == 0) {
+    cmd_ls();
+    continue;
+}
+
+if (k_strncmp(cmd, "touch ", 6) == 0) {
+    cmd_touch(k_ltrim(cmd + 6));
+    continue;
+}
+
+if (k_strncmp(cmd, "cat ", 4) == 0) {
+    cmd_cat(k_ltrim(cmd + 4));
+    continue;
+}
+
+if (k_strncmp(cmd, "write ", 6) == 0) {
+    cmd_write(k_ltrim(cmd + 6));
+    continue;
+}
+
+if (k_strncmp(cmd, "rm ", 3) == 0) {
+    cmd_rm(k_ltrim(cmd + 3));
+    continue;
+}
+
 /* Milestone stubs */
 if (k_strcmp(cmd, "kill")    == 0 ||
     k_strcmp(cmd, "threads") == 0 ||
-    k_strcmp(cmd, "free")    == 0 ||
-    k_strcmp(cmd, "ls")      == 0 ||
-    k_strcmp(cmd, "cat")     == 0) {
+    k_strcmp(cmd, "free")    == 0) {
     vga_puts_color("  [TODO] This command is not yet implemented.\n",
                    VGA_YELLOW, VGA_BLACK);
     vga_puts("  Implement it as part of your lecture assignment.\n");
@@ -358,7 +573,10 @@ void kernel_main(void) {
     pmm_init();
 test_pmm();
 
-    process_init();
+/* Initialize the Stage 4 RAM disk filesystem. */
+fs_init();
+
+process_init();
 
     /* Create the Stage 1 processes. */
     process_create(shell_process);

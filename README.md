@@ -1,4 +1,4 @@
-# SENG21213-OS — Stage 3: Physical Memory Management
+# SENG21213-OS — Stage 4: RAM Disk File System
 
 > **Course**: SENG 21213 – Computer Architecture & Operating Systems  
 > **Year**: 2nd Year, Software Engineering  
@@ -8,79 +8,69 @@
 
 ## What Is This?
 
-This is **Stage 3** of your semester-long OS assignment. Stage 0 established the 
-boot process, VGA display, keyboard input, and shell. Stage 1 added process 
-management, timer interrupts, context switching, and a Round-Robin scheduler. 
-Stage 2 added threads and basic synchronization primitives including mutexes and 
-semaphores. Stage 3 adds physical memory management using the BIOS E820 memory 
-map and a physical frame bitmap.
+This is Stage 4 of your semester-long OS assignment. Stage 0 established the boot process, VGA display, keyboard input, and shell. Stage 1 added process management, timer interrupts, context switching, and a Round-Robin scheduler. Stage 2 added threads and basic synchronization primitives including mutexes and semaphores. Stage 3 added physical memory management using the BIOS E820 memory map and a physical frame bitmap. Stage 4 adds a simple RAM disk file system with a superblock, block and inode bitmaps, inodes, a flat directory, file operations, and shell commands for creating, reading, writing, listing, and deleting files.
 
 ```
 seng21213-os/
 │
 ├── boot/
-│   ├── boot.asm              ← MBR bootloader; starts the computer and
-│   │                            switches from 16-bit Real Mode to
-│   │                            32-bit Protected Mode
+│   ├── boot.asm              ← MBR bootloader; switches from Real Mode
+│   │                            to 32-bit Protected Mode
 │   │
-│   └── switch.asm            ← Handles context switching and the IRQ0
-│                                timer interrupt used by the scheduler
+│   └── switch.asm            ← Context switching and IRQ0 timer interrupt
+│                                used by the scheduler
 │
 ├── kernel/
 │   ├── kernel_entry.asm      ← Protected-mode entry point; calls kernel_main()
 │   │
-│   ├── kernel.c              ← Main kernel code, shell, and demo processes
+│   ├── kernel.c              ← Main kernel code, shell, and commands
+│   │                            including Stage 4 filesystem commands
 │   │
-│   ├── process.c             ← Process creation and Process Control
-│   │                            Block (PCB) management
+│   ├── process.c             ← Process creation and PCB management
+│   ├── process.h             ← Process structures and declarations
 │   │
-│   ├── process.h             ← Process structures, process states, and
-│   │                            process function declarations
+│   ├── scheduler.c           ← PIT, IDT, PIC and Round-Robin scheduler
 │   │
-│   ├── scheduler.c           ← Initializes PIT, IDT, PIC and implements
-│   │                            the Round-Robin scheduler
+│   ├── thread.c              ← Thread creation, management and scheduling
+│   ├── thread.h              ← Thread Control Block and declarations
 │   │
-│   ├── thread.c              ← Thread creation, management, states,
-│   │                            yielding, and termination
+│   ├── mutex.c               ← Mutex locking and unlocking
+│   ├── mutex.h               ← Mutex structure and declarations
 │   │
-│   ├── thread.h              ← Thread Control Block (TCB), thread states,
-│   │                            and thread function declarations
+│   ├── semaphore.c           ← Semaphore wait and signal operations
+│   ├── semaphore.h           ← Semaphore structure and declarations
 │   │
-│   ├── mutex.c               ← Implements mutex initialization,
-│   │                            locking, and unlocking
+│   ├── pmm.c                 ← Physical memory manager
+│   ├── pmm.h                 ← Physical memory manager declarations
 │   │
-│   ├── mutex.h               ← Mutex structure and function declarations
+│   ├── ramdisk.c             ← Stage 4: 1 MB RAM disk implementation
+│   ├── ramdisk.h             ← Stage 4: RAM disk definitions
 │   │
-│   ├── semaphore.c           ← Implements semaphore initialization,
-│   │                            wait, and signal operations
+│   ├── fs.c                  ← Stage 4: File system implementation
+│   │                            (open, read, write, close, unlink, list)
 │   │
-│   ├── semaphore.h           ← Semaphore structure and function declarations
+│   ├── fs.h                  ← Stage 4: File system structures,
+│   │                            constants and API declarations
 │   │
-│   ├── vga.c                 ← VGA 80×25 text-mode display driver
-│   │
-│   ├── vga.h                 ← VGA driver declarations and color definitions
+│   ├── vga.c                 ← VGA text-mode display driver
+│   ├── vga.h                 ← VGA driver declarations and colors
 │   │
 │   ├── keyboard.c            ← PS/2 keyboard input driver
-│   │
 │   └── keyboard.h            ← Keyboard driver declarations
 │
 ├── include/
-│   └── types.h               ← Basic integer types and boolean definitions
+│   └── types.h               ← Basic integer and boolean types
 │
-├── linker.ld                 ← Linker script; defines how the kernel is
-│                                arranged in memory
+├── linker.ld                 ← Kernel memory layout and sections
 │
-├── Makefile                  ← Build system; compiles and links all
-│                                kernel and boot source files
+├── Makefile                  ← Build system for the OS
 │
-├── Dockerfile                ← Defines the reproducible Docker build
-│                                environment
+├── Dockerfile                ← Reproducible Docker build environment
 │
-├── .gitignore                ← Specifies files that Git should ignore,
-│                                such as build artifacts
+├── .gitignore                ← Ignores build artifacts and generated files
 │
-└── README.md                 ← Project documentation, setup instructions,
-                                 milestones, and implementation details
+└── README.md                 ← Project documentation and milestone details
+
 ```
 
 ---
@@ -93,7 +83,7 @@ seng21213-os/
 | L09 | ✅ Stage 1 – Process Management & Scheduler | `kernel/process.c`, `kernel/process.h`, `kernel/scheduler.c`, `boot/switch.asm` |
 | L10 | ✅ Stage 2 – Threads & Synchronisation | `kernel/thread.c`, `kernel/thread.h`, `kernel/mutex.c`, `kernel/mutex.h`, `kernel/semaphore.c`, `kernel/semaphore.h` |
 | L11 | ✅ Stage 3 – Physical Memory Management | `kernel/pmm.c`, `kernel/pmm.h` |
-| L12 | File System | `kernel/fs.c`, `kernel/ramdisk.c` |
+| L12 | ✅ Stage 4 – RAM Disk File System | `kernel/ramdisk.c`, `kernel/ramdisk.h`, `kernel/fs.c`, `kernel/fs.h` |
 
 ---
 
@@ -292,6 +282,71 @@ Implemented:
 - `meminfo` shell command
 - PMM test allocating and freeing 100 frames
 - Verified PMM operation in QEMU
+
+---
+
+## Stage 4 – RAM Disk File System
+
+Stage 4 implements a simple flat file system stored entirely in a 1 MB
+RAM disk.
+
+### RAM Disk
+
+The RAM disk is divided into 256 blocks of 4 KB each.
+
+The file system layout is:
+
+| Block | Purpose |
+|-------|---------|
+| 0 | Superblock |
+| 1 | Directory |
+| 2 | Block bitmap |
+| 3 | Inode bitmap |
+| 4 | Inode table |
+| 5–255 | File data blocks |
+
+### File System Features
+
+Implemented:
+
+- 1 MB RAM disk
+- Superblock with file system metadata
+- Block bitmap
+- Inode bitmap
+- Inode table
+- Flat directory with 28-character file names
+- Eight direct block pointers per inode
+- Maximum file size of 32 KB
+- File opening and closing
+- File reading and writing
+- File deletion
+- Open file table
+- Append mode
+
+### Shell Commands
+
+The following file system commands are available:
+
+```text
+ls
+touch <name>
+cat <name>
+write <name> <text>
+rm <name>
+
+##Stage 4 Verification
+The file system was tested in QEMU by:
+
+Creating files
+Writing data to files
+Reading file contents
+Listing directory contents
+Deleting files
+Testing multiple files in the same RAM disk session
+Verifying deleted files no longer appear in ls
+
+The RAM disk is volatile, so its contents are cleared when the OS is
+restarted.
 
 ## Debugging Tips
 
