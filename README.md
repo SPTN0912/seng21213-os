@@ -1,4 +1,4 @@
-# SENG21213-OS — Stage 2: Threads & Synchronisation
+# SENG21213-OS — Stage 3: Physical Memory Management
 
 > **Course**: SENG 21213 – Computer Architecture & Operating Systems  
 > **Year**: 2nd Year, Software Engineering  
@@ -8,11 +8,12 @@
 
 ## What Is This?
 
-This is **Stage 2** of your semester-long OS assignment. Stage 0 established the
-boot process, VGA display, keyboard input, and shell. Stage 1 added process
-management, timer interrupts, context switching, and a Round-Robin scheduler.
-Stage 2 adds threads and basic synchronization primitives including mutexes and
-semaphores.
+This is **Stage 3** of your semester-long OS assignment. Stage 0 established the 
+boot process, VGA display, keyboard input, and shell. Stage 1 added process 
+management, timer interrupts, context switching, and a Round-Robin scheduler. 
+Stage 2 added threads and basic synchronization primitives including mutexes and 
+semaphores. Stage 3 adds physical memory management using the BIOS E820 memory 
+map and a physical frame bitmap.
 
 ```
 seng21213-os/
@@ -91,7 +92,7 @@ seng21213-os/
 | L08 | ✅ Stage 0 – Boot + VGA + Shell | *Given to you* |
 | L09 | ✅ Stage 1 – Process Management & Scheduler | `kernel/process.c`, `kernel/process.h`, `kernel/scheduler.c`, `boot/switch.asm` |
 | L10 | ✅ Stage 2 – Threads & Synchronisation | `kernel/thread.c`, `kernel/thread.h`, `kernel/mutex.c`, `kernel/mutex.h`, `kernel/semaphore.c`, `kernel/semaphore.h` |
-| L11 | Memory Management | `kernel/pmm.c`, `kernel/vmm.c` |
+| L11 | ✅ Stage 3 – Physical Memory Management | `kernel/pmm.c`, `kernel/pmm.h` |
 | L12 | File System | `kernel/fs.c`, `kernel/ramdisk.c` |
 
 ---
@@ -277,6 +278,20 @@ kernel/mutex.h
 kernel/mutex.c
 kernel/semaphore.h
 kernel/semaphore.c
+
+### Stage 3 – Physical Memory Management
+
+Implemented:
+
+- BIOS E820 memory map parsing
+- Physical frame bitmap with 1 bit per 4 KB frame
+- First-fit physical frame allocation
+- Physical frame freeing
+- Total, used, and free memory tracking
+- Physical frame 0 reservation
+- `meminfo` shell command
+- PMM test allocating and freeing 100 frames
+- Verified PMM operation in QEMU
 
 ## Debugging Tips
 

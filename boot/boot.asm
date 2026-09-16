@@ -30,6 +30,10 @@ start:
     mov  si, msg_load
     call print_rm
 
+    ; Get BIOS E820 physical memory map.
+    call detect_memory
+
+
 ; ---------------------------------------------------------------------------
 ; Load kernel: read sectors 2..65 from disk into memory at 0x1000:0x0000
 ; This gives us 64 × 512 = 32 768 bytes for the kernel (Stage 0)
@@ -92,12 +96,62 @@ init_pm32:
 ; Error handlers
 ; ---------------------------------------------------------------------------
 [BITS 16]
+
 disk_error:
     mov  si, msg_err
     call print_rm
     mov  si, msg_halt
     call print_rm
-    jmp  $              ; Infinite loop
+    jmp $
+; ---------------------------------------------------------------------------
+; BIOS E820 memory map
+;
+; Stores:
+;   [0x8000]     = number of entries
+;   [0x8004]     = first 24-byte E820 entry
+;   [0x801C]     = second entry
+;   ...
+;
+; Maximum: 32 entries
+; ---------------------------------------------------------------------------
+detect_memory:
+    xor eax, eax
+    mov [0x8000], eax       ; Entry count = 0
+
+    xor ebx, ebx            ; EBX = continuation value
+    mov di, 0x8004          ; ES:DI = destination buffer
+    mov bp, 32               ; Maximum number of entries
+
+.e820_loop:
+    cmp bp, 0
+    je .done
+
+    mov eax, 0xE820
+    mov edx, 0x534D4150     ; "SMAP"
+    mov ecx, 24              ; Request 24-byte entry
+    mov dword [es:di + 20], 1 ; ACPI extended attributes = enabled
+
+    int 0x15
+    jc .done                 ; BIOS error
+
+    cmp eax, 0x534D4150      ; Verify "SMAP"
+    jne .done
+
+    cmp ecx, 20
+    jb .next                  ; Invalid entry size
+
+    ; Count this entry.
+    inc dword [0x8000]
+
+.next:
+    add di, 24
+    dec bp
+
+    cmp ebx, 0
+    jne .e820_loop
+
+.done:
+    ret
 
 ; ---------------------------------------------------------------------------
 ; Subroutine: print_rm – print NUL-terminated string in SI (Real Mode)
@@ -118,10 +172,7 @@ print_rm:
 ; ---------------------------------------------------------------------------
 boot_drive  db 0
 
-msg_banner  db 13, 10, '  ================================', 13, 10
-            db '  SENG21213-OS  |  Stage 0        ', 13, 10
-            db '  Computer Architecture & OS       ', 13, 10
-            db '  ================================', 13, 10, 0
+msg_banner  db 13, 10, ' SENG21213-OS Stage 0', 13, 10, 0
 msg_load    db '  [BOOT] Loading kernel...', 13, 10, 0
 msg_ok      db '  [BOOT] Kernel loaded OK ', 13, 10, 0
 msg_err     db '  [BOOT] DISK ERROR!       ', 13, 10, 0

@@ -25,16 +25,19 @@
 #include "vga.h"
 #include "keyboard.h"
 #include "process.h"
+#include "pmm.h"
 #include "../include/types.h"
 
 /* ---------------------------------------------------------------------------
  * Forward declarations of shell commands
  * --------------------------------------------------------------------------*/
+static void test_pmm(void);
 static void cmd_help(void);
 static void cmd_clear(void);
 static void cmd_about(void);
 static void cmd_echo(const char *args);
 static void cmd_mem(void);
+static void cmd_meminfo(void);
 static void cmd_ps(void);
 
 /* ---------------------------------------------------------------------------
@@ -126,6 +129,7 @@ static void cmd_help(void) {
     vga_puts("  about   – About this OS and course\n");
     vga_puts("  echo    – Echo text to screen\n");
     vga_puts("  mem     – Memory map (stub)\n");
+    vga_puts("  meminfo – Show physical memory information\n");
     vga_puts_color("\n  Milestones (to implement):\n", VGA_LIGHT_CYAN, VGA_BLACK);
     vga_puts("  ps      – [L09] List processes\n");
     vga_puts("  kill    – [L09] Terminate a process\n");
@@ -167,6 +171,21 @@ static void cmd_mem(void) {
     vga_puts("  0xB8000    – 0xBFFFF     :  VGA frame buffer\n");
     vga_puts_color("\n  TODO: Use BIOS int 0x15, EAX=0xE820 to get real memory map\n\n",
                    VGA_YELLOW, VGA_BLACK);
+}
+static void cmd_meminfo(void) {
+    uint32_t total = pmm_get_total_memory();
+    uint32_t used = pmm_get_used_memory();
+    uint32_t free = pmm_get_free_memory();
+
+    vga_puts_color("\n  Physical Memory Information\n",
+                   VGA_LIGHT_CYAN, VGA_BLACK);
+    vga_puts("  --------------------------------\n");
+
+    vga_printf("  Total Memory : %u MB\n", total / (1024 * 1024));
+    vga_printf("  Used Memory  : %u KB\n", used / 1024);
+    vga_printf("  Free Memory  : %u MB\n", free / (1024 * 1024));
+
+    vga_puts("\n");
 }
 static void cmd_ps(void) {
     pcb_t *table = process_get_table();
@@ -228,6 +247,10 @@ static void shell_run(void) {
         if (k_strcmp(cmd, "clear") == 0) { cmd_clear(); continue; }
         if (k_strcmp(cmd, "about") == 0) { cmd_about(); continue; }
         if (k_strcmp(cmd, "mem")   == 0) { cmd_mem();   continue; }
+if (k_strcmp(cmd, "meminfo") == 0) {
+    cmd_meminfo();
+    continue;
+}
 
         if (k_strncmp(cmd, "echo ", 5) == 0) {
             cmd_echo(k_ltrim(cmd + 5));
@@ -297,10 +320,43 @@ static void demo_process_2(void) {
 /* ---------------------------------------------------------------------------
  * Kernel entry point – called from kernel_entry.asm
  * --------------------------------------------------------------------------*/
+static void test_pmm(void)
+{
+    uint32_t frames[100];
+
+    vga_puts_color("\n  PMM Test: Allocating 100 frames...\n",
+                   VGA_YELLOW, VGA_BLACK);
+
+    for (uint32_t i = 0; i < 100; i++) {
+        frames[i] = pmm_alloc_frame();
+
+        if (frames[i] == 0) {
+            vga_puts_color("  ERROR: Frame allocation failed!\n",
+                           VGA_LIGHT_RED, VGA_BLACK);
+            return;
+        }
+    }
+
+    vga_puts_color("  100 frames allocated successfully.\n",
+                   VGA_LIGHT_GREEN, VGA_BLACK);
+
+    for (uint32_t i = 0; i < 100; i++) {
+        pmm_free_frame(frames[i]);
+    }
+
+    vga_puts_color("  100 frames freed successfully.\n",
+                   VGA_LIGHT_GREEN, VGA_BLACK);
+
+    vga_printf("  Used memory after test: %u KB\n",
+               pmm_get_used_memory() / 1024);
+}
 void kernel_main(void) {
     vga_init();
     kb_init();
     print_splash();
+
+    pmm_init();
+test_pmm();
 
     process_init();
 
